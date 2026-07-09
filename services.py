@@ -12,18 +12,41 @@
 
 TOKEN, IMAGE, VIDEO = "token", "image", "video"
 
+# ---- 비디오: Veo 3.1 티어(lite/fast/pro) × 해상도(720p/1080p). 기본 lite/720p. ----
+# 단가(USD/초) = Google Gemini API 공식 가격(2026-06-30 확인).
+#   https://ai.google.dev/gemini-api/docs/pricing  (Veo 3.1)
+#   lite = veo-3.1-lite-generate-preview, fast = veo-3.1-fast-generate-preview,
+#   pro  = Veo 3.1 Standard (veo-3.1-generate-preview)
+VIDEO_MODELS = {"lite": "Veo 3.1 Lite", "fast": "Veo 3.1 Fast", "pro": "Veo 3.1 Standard"}
+VIDEO_RESOLUTIONS = ["720p", "1080p"]
+
+
+def video_key(model, res):
+    return f"veo-{model}-{res}"
+
+
+VIDEO_PRICES = {
+    video_key("lite", "720p"):  {"per_second": 0.05},
+    video_key("lite", "1080p"): {"per_second": 0.08},
+    video_key("fast", "720p"):  {"per_second": 0.10},
+    video_key("fast", "1080p"): {"per_second": 0.12},
+    video_key("pro", "720p"):   {"per_second": 0.40},   # Standard: 720p/1080p 동일
+    video_key("pro", "1080p"):  {"per_second": 0.40},
+}
+
 # ---- 단가 기본값(USD). 조사일(2026-07) 참고값. 공식 페이지에서 확인·수정. ----
 DEFAULT_PRICES = {
     # USD / 1M tokens
-    "gpt-4o":                        {"in": 2.50, "out": 10.00},
-    "gpt-4o-mini":                   {"in": 0.15, "out": 0.60},
-    "gemini-2.5-flash":              {"in": 0.30, "out": 2.50},
-    # USD / image
-    "gemini-3.1-flash-image":        {"per_image": 0.039},
-    # USD / second
-    "veo-3.1-fast-generate-preview": {"per_second": 0.10},
+    "gpt-4o":                 {"in": 2.50, "out": 10.00},
+    "gpt-4o-mini":            {"in": 0.15, "out": 0.60},
+    "gemini-2.5-flash":       {"in": 0.30, "out": 2.50},
+    # USD / image — Gemini 3.1 Flash Image(Nano Banana 2) 1K(1024x1024) 장당.
+    # 공식: https://ai.google.dev/gemini-api/docs/pricing ($0.067/1K장, 2026-06-30)
+    "gemini-3.1-flash-image": {"per_image": 0.067},
+    # USD / second — 비디오 모델×해상도 매트릭스
+    **VIDEO_PRICES,
     # USD / video  (vod Luma 폴백, 개당)
-    "luma-dream-machine":            {"per_video": 0.40},
+    "luma-dream-machine":     {"per_video": 0.40},
 }
 
 DEFAULT_FX = 1380.0  # KRW/USD
@@ -99,7 +122,7 @@ SERVICES = {
         "name": "모델 워킹/턴 영상", "unit": "동영상 1개", "provider": "OpenAI+Google",
         "steps": [
             _tok("vod_analyze", "이미지 분석/크롭", "gpt-4o-mini", 500, 300),  # count=평균 이미지 수(1~14)
-            _vid("vod_veo", "비디오 생성(Veo)", "veo-3.1-fast-generate-preview", 5.0),
+            _vid("vod_veo", "비디오 생성(Veo)", video_key("lite", "720p"), 5.0),
         ],
     },
 }
@@ -109,7 +132,7 @@ DEFAULT_OPTIONS = {
     "coordi": {"mode": "mode1", "try_on_n": 3, "retry_pct": 0.0},
     "review": {"model": "gpt-4o-mini", "val_retries": 0.0},
     "search": {"cache_hit_pct": 0.0},
-    "vod": {"avg_images": 14, "video_sec": 5.0, "luma_prob": 0.0},
+    "vod": {"avg_images": 14, "video_sec": 5.0, "luma_prob": 0.0, "video_model": "lite", "video_res": "720p"},
 }
 
 
@@ -138,7 +161,10 @@ def concrete_steps(svc_key, opts):
         out[1]["count"] = 1 - opts["cache_hit_pct"] / 100  # 캐시 적중 시 큐레이션 미호출
     elif svc_key == "vod":
         a = dict(s["steps"][0]); a["count"] = opts["avg_images"]; out.append(a)
-        v = dict(s["steps"][1]); v["per_call"] = opts["video_sec"]; out.append(v)
+        v = dict(s["steps"][1])
+        v["model"] = video_key(opts["video_model"], opts["video_res"])
+        v["per_call"] = opts["video_sec"]
+        out.append(v)
         if opts["luma_prob"] > 0:
             out.append({"id": "vod_luma", "name": "Luma 폴백",
                         "model": "luma-dream-machine", "billing": VIDEO,

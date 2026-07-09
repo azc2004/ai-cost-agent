@@ -36,7 +36,7 @@ ink = INK["dark" if DARK else "light"]
 MODEL_KIND = {
     "gpt-4o": "token", "gpt-4o-mini": "token", "gemini-2.5-flash": "token",
     "gemini-3.1-flash-image": "image",
-    "veo-3.1-fast-generate-preview": "per_second",
+    **{k: "per_second" for k in S.VIDEO_PRICES},  # veo {lite/pro}-{720p/1080p} 매트릭스
     "luma-dream-machine": "per_video",
 }
 KIND_LABEL = {"token": "토큰/1M", "image": "이미지/장", "per_second": "비디오/초", "per_video": "비디오/개"}
@@ -148,6 +148,11 @@ for tab, k in zip(tabs, SERV_ORDER):
                 o["cache_hit_pct"] = st.slider("큐레이션 캐시 적중률 (%)", 0.0, 100.0, 0.0, 5.0, key=f"c_{k}")
             elif k == "vod":
                 o["avg_images"] = st.slider("평균 분석 이미지 수", 1, 14, S.DEFAULT_OPTIONS[k]["avg_images"], key=f"ai_{k}")
+                o["video_model"] = st.selectbox("비디오 모델", list(S.VIDEO_MODELS),
+                                                format_func=lambda m: S.VIDEO_MODELS[m],
+                                                index=list(S.VIDEO_MODELS).index(S.DEFAULT_OPTIONS[k]["video_model"]), key=f"vm_{k}")
+                o["video_res"] = st.selectbox("해상도", S.VIDEO_RESOLUTIONS,
+                                              index=S.VIDEO_RESOLUTIONS.index(S.DEFAULT_OPTIONS[k]["video_res"]), key=f"vr_{k}")
                 o["video_sec"] = st.slider("비디오 길이 (초)", 1.0, 30.0, S.DEFAULT_OPTIONS[k]["video_sec"], 1.0, key=f"vs_{k}")
                 o["luma_prob"] = st.slider("Luma 폴백 확률 (%)", 0.0, 100.0, 0.0, 5.0, key=f"lp_{k}")
         with c2:

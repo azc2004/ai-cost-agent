@@ -62,6 +62,7 @@ python services.py
 3. **캐싱/재시도**: coordi(재시도 가중률), review(검증 재시도 평균), search(큐레이션 캐시 적중률), vod(Luma 폴백 확률) 보정 계수를 옵션으로 반영.
 4. **외부 API 비용**: search-agent 트렌드 API, vod-agent 하프클럽 API 등은 무료/내부로 간주해 **제외**.
 5. **search-agent 임베딩**: Zilliz를 스칼라 필터(`prd_no in [...]`)로만 사용 → 임베딩 비용 0.
+6. **vod 비디오 모델/해상도**: Veo 3.1 티어(lite/fast/pro=Standard) × 해상도(720p/1080p) 매트릭스로 초당 단가 결정. 기본 **lite/720p**. 단가는 [Google 공식 가격](https://ai.google.dev/gemini-api/docs/pricing)(2026-06-30) 반영 — lite $0.05/$0.08, fast $0.10/$0.12, standard $0.40/$0.40(초당). 사이드바 단가표의 `veo-{티어}-{해상도}` 행에서 수정.
 
 ## 비고
 
