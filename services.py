@@ -10,7 +10,7 @@
   video = 초×초당단가  (또는 개당단가)
 """
 
-TOKEN, IMAGE, VIDEO = "token", "image", "video"
+TOKEN, IMAGE, VIDEO, REQUEST, PAGE = "token", "image", "video", "request", "page"
 
 # ---- 비디오: Veo 3.1 티어(lite/fast/pro) × 해상도(720p/1080p). 기본 lite/720p. ----
 # 단가(USD/초) = Google Gemini API 공식 가격(2026-06-30 확인).
@@ -47,6 +47,9 @@ DEFAULT_PRICES = {
     **VIDEO_PRICES,
     # USD / video  (vod Luma 폴백, 개당)
     "luma-dream-machine":     {"per_video": 0.40},
+    # USD / request & page — Exa 외부 검색 API (https://exa.ai/pricing)
+    "exa-search":             {"per_request": 0.007},   # $7/1k 검색 요청(결과 ≤10)
+    "exa-contents":           {"per_page": 0.001},      # $1/1k 본문 페이지
 }
 
 DEFAULT_FX = 1380.0  # KRW/USD — 실시간 환율 조회 실패 시 폴백(기본값은 app.py에서 실시간 조회)
@@ -65,6 +68,14 @@ def _img(sid, name, model, per_call=1, count=1):
 def _vid(sid, name, model, per_call=5.0, count=1):
     return {"id": sid, "name": name, "model": model, "billing": VIDEO,
             "count": count, "per_call": per_call}
+
+
+def _req(sid, name, model, count):
+    return {"id": sid, "name": name, "model": model, "billing": REQUEST, "count": count}
+
+
+def _page(sid, name, model, count):
+    return {"id": sid, "name": name, "model": model, "billing": PAGE, "count": count}
 
 
 # ---- 서비스 단계 레시피(데이터) ----
@@ -131,7 +142,7 @@ SERVICES = {
 DEFAULT_OPTIONS = {
     "coordi": {"mode": "mode1", "try_on_n": 3, "retry_pct": 0.0},
     "review": {"model": "gpt-4o-mini", "val_retries": 0.0},
-    "search": {"cache_hit_pct": 0.0},
+    "search": {"cache_hit_pct": 0.0, "exa_enabled": True, "exa_calls": 2, "exa_results": 5},
     "vod": {"avg_images": 14, "video_sec": 10.0, "luma_prob": 0.0, "video_model": "lite", "video_res": "720p"},
 }
 
@@ -159,6 +170,10 @@ def concrete_steps(svc_key, opts):
         for st in s["steps"]:
             out.append(dict(st))
         out[1]["count"] = 1 - opts["cache_hit_pct"] / 100  # 캐시 적중 시 큐레이션 미호출
+        if opts.get("exa_enabled"):                          # Exa 트렌드 수집(선택)
+            out.append(_req("srch_exa", "Exa 트렌드 검색", "exa-search", opts["exa_calls"]))
+            out.append(_page("srch_exa_body", "Exa 본문(contents)", "exa-contents",
+                             opts["exa_calls"] * opts["exa_results"]))
     elif svc_key == "vod":
         a = dict(s["steps"][0]); a["count"] = opts["avg_images"]; out.append(a)
         v = dict(s["steps"][1])
@@ -181,6 +196,10 @@ def step_usd(step, prices, tok=None):
         return (it * p["in"] + ot * p["out"]) / 1_000_000 * step["count"]
     if step["billing"] == IMAGE:
         return step["count"] * step["per_call"] * p["per_image"]
+    if step["billing"] == REQUEST:
+        return step["count"] * p["per_request"]
+    if step["billing"] == PAGE:
+        return step["count"] * p["per_page"]
     # VIDEO
     if "per_video" in p:
         return step["count"] * p["per_video"]
@@ -196,7 +215,8 @@ def cost_unit(svc_key, opts, prices, tok_overrides=None, fx=DEFAULT_FX):
         u = step_usd(st, prices, tok_overrides.get(st["id"]))
         total += u
         bd.append({"단계": st["name"], "모델": st["model"],
-                   "과금": {"token": "토큰", "image": "이미지", "video": "비디오"}[st["billing"]],
+                   "과금": {"token": "토큰", "image": "이미지", "video": "비디오",
+                           "request": "검색요청", "page": "본문"}[st["billing"]],
                    "USD": u, "KRW": u * fx})
     return total, total * fx, bd
 

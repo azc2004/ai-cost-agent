@@ -36,11 +36,12 @@ python services.py
 | 검색 키워드 추천상품 (`search-agent`) | 추천 1번 |
 | 모델 워킹/턴 영상 (`vod-agent`) | 동영상 1개 |
 
-## 과금 모델 (3종)
+## 과금 방식
 
 - **토큰**: `(입력토큰 × input단가 + 출력토큰 × output단가) / 1,000,000`
 - **이미지**: `장수 × 장당단가`
 - **비디오**: `초 × 초당단가` (Luma 폴백은 개당)
+- **외부 검색(Exa)**: `검색요청 수 × $7/1k + 본문 페이지 수 × $1/1k`
 
 ```
 서비스 1건당 KRW = Σ(단계 비용 USD) × 환율(KRW/USD)
@@ -60,7 +61,7 @@ python services.py
 1. **입력 토큰**: 코드에 명시된 값은 출력 `max_tokens`뿐. 입력 토큰은 서비스별 **추정 기본값**이며 사이드바에서 "추정"으로 명시 표기 후 수정 가능.
 2. **이미지 토큰**: gpt-4o/mini의 이미지 입력은 해상도별 토큰 환산 — 앱에서는 토큰 추정치로 단순화.
 3. **캐싱/재시도**: coordi(재시도 가중률), review(검증 재시도 평균), search(큐레이션 캐시 적중률), vod(Luma 폴백 확률) 보정 계수를 옵션으로 반영.
-4. **외부 API 비용**: search-agent 트렌드 API, vod-agent 하프클럽 API 등은 무료/내부로 간주해 **제외**.
+4. **외부 API 비용**: search-agent의 **Exa.ai 트렌드 수집 비용은 포함** — 검색 요청($7/1k) + 본문 페이지($1/1k), [Exa 공식 가격](https://exa.ai/pricing). 호출·결과 수는 search 탭에서 조정. 나머지(하프클럽/네이버/무신사/Daum·Google 뉴스, vod 하프클럽)는 무료/내부로 제외.
 5. **search-agent 임베딩**: Zilliz를 스칼라 필터(`prd_no in [...]`)로만 사용 → 임베딩 비용 0.
 6. **vod 비디오 모델/해상도**: Veo 3.1 티어(lite/fast/pro=Standard) × 해상도(720p/1080p) 매트릭스로 초당 단가 결정. 기본 **lite/720p**. 단가는 [Google 공식 가격](https://ai.google.dev/gemini-api/docs/pricing)(2026-06-30) 반영 — lite $0.05/$0.08, fast $0.10/$0.12, standard $0.40/$0.40(초당). 사이드바 단가표의 `veo-{티어}-{해상도}` 행에서 수정.
 

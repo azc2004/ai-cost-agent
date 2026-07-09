@@ -51,8 +51,10 @@ MODEL_KIND = {
     "gemini-3.1-flash-image": "image",
     **{k: "per_second" for k in S.VIDEO_PRICES},  # veo {lite/pro}-{720p/1080p} 매트릭스
     "luma-dream-machine": "per_video",
+    "exa-search": "request", "exa-contents": "page",   # Exa 외부 검색
 }
-KIND_LABEL = {"token": "토큰/1M", "image": "이미지/장", "per_second": "비디오/초", "per_video": "비디오/개"}
+KIND_LABEL = {"token": "토큰/1M", "image": "이미지/장", "per_second": "비디오/초",
+              "per_video": "비디오/개", "request": "검색/건", "page": "본문/페이지"}
 
 
 def token_steps():
@@ -84,7 +86,9 @@ price_df = pd.DataFrame([
      "out_price": S.DEFAULT_PRICES[m].get("out", 0.0),
      "per_image": S.DEFAULT_PRICES[m].get("per_image", 0.0),
      "per_second": S.DEFAULT_PRICES[m].get("per_second", 0.0),
-     "per_video": S.DEFAULT_PRICES[m].get("per_video", 0.0)}
+     "per_video": S.DEFAULT_PRICES[m].get("per_video", 0.0),
+     "per_request": S.DEFAULT_PRICES[m].get("per_request", 0.0),
+     "per_page": S.DEFAULT_PRICES[m].get("per_page", 0.0)}
     for m in MODEL_KIND
 ])
 edited_price = st.sidebar.data_editor(
@@ -97,6 +101,8 @@ edited_price = st.sidebar.data_editor(
         "per_image": st.column_config.NumberColumn("장당", format="%.4f"),
         "per_second": st.column_config.NumberColumn("초당", format="%.4f"),
         "per_video": st.column_config.NumberColumn("개당", format="%.4f"),
+        "per_request": st.column_config.NumberColumn("검색/건", format="%.4f"),
+        "per_page": st.column_config.NumberColumn("본문/page", format="%.4f"),
     },
     num_rows="fixed", key="price_tbl", width="stretch",
 )
@@ -109,8 +115,12 @@ for _, r in edited_price.iterrows():
         prices[r["model"]] = {"per_image": r["per_image"]}
     elif k == "per_second":
         prices[r["model"]] = {"per_second": r["per_second"]}
-    else:
+    elif k == "per_video":
         prices[r["model"]] = {"per_video": r["per_video"]}
+    elif k == "request":
+        prices[r["model"]] = {"per_request": r["per_request"]}
+    else:  # page
+        prices[r["model"]] = {"per_page": r["per_page"]}
 
 st.sidebar.subheader("입력 토큰 추정치")
 st.sidebar.caption("코드에 명시된 값은 출력 max_tokens뿐. input은 추정(수정 가능).")
@@ -162,6 +172,9 @@ for tab, k in zip(tabs, SERV_ORDER):
                 o["val_retries"] = st.slider("검증 재시도 평균 (회)", 0.0, 5.0, 0.0, 0.1, key=f"vr_{k}")
             elif k == "search":
                 o["cache_hit_pct"] = st.slider("큐레이션 캐시 적중률 (%)", 0.0, 100.0, 0.0, 5.0, key=f"c_{k}")
+                o["exa_enabled"] = st.checkbox("Exa 트렌드 수집 포함", S.DEFAULT_OPTIONS[k]["exa_enabled"], key=f"xe_{k}")
+                o["exa_calls"] = st.number_input("Exa 검색 호출 수", 1, 10, S.DEFAULT_OPTIONS[k]["exa_calls"], key=f"xc_{k}")
+                o["exa_results"] = st.number_input("Exa 결과 수/호출", 1, 10, S.DEFAULT_OPTIONS[k]["exa_results"], key=f"xr_{k}")
             elif k == "vod":
                 o["avg_images"] = st.slider("평균 분석 이미지 수", 1, 14, S.DEFAULT_OPTIONS[k]["avg_images"], key=f"ai_{k}")
                 o["video_model"] = st.selectbox("비디오 모델", list(S.VIDEO_MODELS),
