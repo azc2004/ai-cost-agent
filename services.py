@@ -85,6 +85,7 @@ def _page(sid, name, model, count):
 SERVICES = {
     "coordi": {
         "name": "상품 코디 추천", "unit": "코디 1개", "provider": "Google",
+        "url": "https://tricycle-coordi-agent.streamlit.app",
         "modes": {
             "mode1": "모드1 (추천+좌표+트렌드+화보)",
             "mode2": "모드2 (좌표+트렌드+화보)",
@@ -116,6 +117,7 @@ SERVICES = {
     },
     "review": {
         "name": "상품평 초안 자동작성·검증", "unit": "상품평 1개", "provider": "OpenAI",
+        "url": "https://tricycle-review-agent.streamlit.app",
         "selectable_model": ["gpt-4o", "gpt-4o-mini"],
         "steps": [
             _tok("rev_val", "이미지 검증", "gpt-4o-mini", 1000, 250),   # max_tokens 250, 런타임 모델 치환
@@ -124,6 +126,7 @@ SERVICES = {
     },
     "search": {
         "name": "검색 키워드 추천상품", "unit": "추천 1번", "provider": "OpenAI/LiteLLM",
+        "url": "https://tricycle-search-agent.streamlit.app",
         "steps": [
             _tok("srch_guide", "가이드 생성", "gpt-4o-mini", 800, 700),  # max_tokens 700
             _tok("srch_cur", "AI 큐레이션", "gpt-4o-mini", 1500, 800),   # max_tokens 800, ttl=600 캐시
@@ -131,6 +134,7 @@ SERVICES = {
     },
     "vod": {
         "name": "모델 워킹/턴 영상", "unit": "동영상 1개", "provider": "OpenAI+Google",
+        "url": "https://tricycle-vod-agent.streamlit.app",
         "steps": [
             _tok("vod_analyze", "이미지 분석/크롭", "gpt-4o-mini", 500, 300),  # count=평균 이미지 수(1~14)
             _vid("vod_veo", "비디오 생성(Veo)", video_key("lite", "720p"), 10.0),

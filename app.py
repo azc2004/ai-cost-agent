@@ -156,6 +156,8 @@ tabs = st.tabs([f"{S.SERVICES[k]['name']} ({S.SERVICES[k]['unit']})" for k in SE
 for tab, k in zip(tabs, SERV_ORDER):
     svc = S.SERVICES[k]
     with tab:
+        if svc.get("url"):
+            st.link_button(f"🔗 {svc['name']} — 서비스 새 탭에서 열기", svc["url"])
         c1, c2 = st.columns([1, 2])
         with c1:
             st.markdown(f"**제공자:** {svc['provider']}")
