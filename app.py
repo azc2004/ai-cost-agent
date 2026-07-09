@@ -3,6 +3,9 @@
 구조: 영역A(사이드바 전역 파라미터) / 영역B(서비스별 시나리오) / 영역C(통합 비교+차트).
 차트 색상은 dataviz 스킬 검증 팔레트(라이트/다크) 사용. 비교표=대비필요 충족, 라인 종단 라벨=CVD floor 충족."""
 
+import json
+import urllib.request
+
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -10,6 +13,16 @@ import plotly.graph_objects as go
 import services as S
 
 st.set_page_config(page_title="AI 비용 산출 대시보드", layout="wide", page_icon="💸")
+
+
+@st.cache_data(ttl=3600)
+def _live_fx():
+    """실시간 USD→KRW 환율 (open.er-api.com, API 키 불필요). 실패 시 DEFAULT_FX 폴백. → (rate, ok)"""
+    try:
+        with urllib.request.urlopen("https://open.er-api.com/v6/latest/USD", timeout=5) as r:
+            return float(json.load(r)["rates"]["KRW"]), True
+    except Exception:
+        return S.DEFAULT_FX, False
 
 # ---- 테마(라이트/다크) 감지 → 팔레트/잉크 선택 ----
 try:
@@ -58,7 +71,10 @@ def token_steps():
 
 # ================= 영역 A — 사이드바(전역 파라미터) =================
 st.sidebar.title("⚙️ 전역 파라미터")
-fx = st.sidebar.slider("환율 (KRW/USD)", 1000, 1600, int(S.DEFAULT_FX), step=10)
+_fx_live, _fx_ok = _live_fx()
+fx = st.sidebar.slider("환율 (KRW/USD)", 1000, 2000,
+                       max(1000, min(2000, int(round(_fx_live)))), step=10)
+st.sidebar.caption(f"기본값 = {'실시간' if _fx_ok else '폴백'} ₩{int(round(_fx_live)):,}/USD · 출처 open.er-api.com")
 
 st.sidebar.subheader("단가 테이블 (USD)")
 st.sidebar.caption("⚠️ 조사일(2026-07) 참고값. 공식 가격 페이지에서 반드시 확인·수정.")

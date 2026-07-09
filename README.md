@@ -53,7 +53,7 @@ python services.py
 
 - **OpenAI** (gpt-4o / gpt-4o-mini): https://openai.com/api/pricing/
 - **Google Gemini** (gemini-2.5-flash, 이미지, Veo): https://ai.google.dev/pricing
-- **환율**: 사이드바 슬라이더(1,000~1,600 KRW/USD), 기본값 1,380
+- **환율**: 사이드바 슬라이더(1,000~2,000 KRW/USD). **기본값은 실시간 환율 자동 적용**(open.er-api.com, 1시간 캐싱 · 조회 실패 시 1,380 폴백)
 
 ### 추정값 안내 (WORK_INSTRUCTION §8)
 

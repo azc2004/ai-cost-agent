@@ -49,7 +49,7 @@ DEFAULT_PRICES = {
     "luma-dream-machine":     {"per_video": 0.40},
 }
 
-DEFAULT_FX = 1380.0  # KRW/USD
+DEFAULT_FX = 1380.0  # KRW/USD — 실시간 환율 조회 실패 시 폴백(기본값은 app.py에서 실시간 조회)
 
 
 def _tok(sid, name, model, in_tok, out_tok, count=1):
@@ -122,7 +122,7 @@ SERVICES = {
         "name": "모델 워킹/턴 영상", "unit": "동영상 1개", "provider": "OpenAI+Google",
         "steps": [
             _tok("vod_analyze", "이미지 분석/크롭", "gpt-4o-mini", 500, 300),  # count=평균 이미지 수(1~14)
-            _vid("vod_veo", "비디오 생성(Veo)", video_key("lite", "720p"), 5.0),
+            _vid("vod_veo", "비디오 생성(Veo)", video_key("lite", "720p"), 10.0),
         ],
     },
 }
@@ -132,7 +132,7 @@ DEFAULT_OPTIONS = {
     "coordi": {"mode": "mode1", "try_on_n": 3, "retry_pct": 0.0},
     "review": {"model": "gpt-4o-mini", "val_retries": 0.0},
     "search": {"cache_hit_pct": 0.0},
-    "vod": {"avg_images": 14, "video_sec": 5.0, "luma_prob": 0.0, "video_model": "lite", "video_res": "720p"},
+    "vod": {"avg_images": 14, "video_sec": 10.0, "luma_prob": 0.0, "video_model": "lite", "video_res": "720p"},
 }
 
 
