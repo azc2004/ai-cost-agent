@@ -31,10 +31,10 @@ except Exception:
     _base = None
 DARK = _base == "dark"
 
-SERV_ORDER = ["coordi", "review", "search", "vod"]
+SERV_ORDER = ["coordi", "review", "search", "vod", "batchpro"]
 PALETTE = {
-    "light": ["#2a78d6", "#1baf7a", "#eda100", "#008300"],
-    "dark":  ["#3987e5", "#199e70", "#c98500", "#008300"],
+    "light": ["#2a78d6", "#1baf7a", "#eda100", "#008300", "#eb6834"],
+    "dark":  ["#3987e5", "#199e70", "#c98500", "#008300", "#d95926"],
 }
 INK = {
     "light": dict(primary="#0b0b0b", secondary="#52514e", muted="#898781",
@@ -48,6 +48,7 @@ ink = INK["dark" if DARK else "light"]
 # ---- 모델별 과금 종류 + 토큰 단계(데이터에서 추출, UI 편집용) ----
 MODEL_KIND = {
     "gpt-4o": "token", "gpt-4o-mini": "token", "gemini-2.5-flash": "token",
+    "amazon-nova-2-lite": "token",
     "gemini-3.1-flash-image": "image",
     **{k: "per_second" for k in S.VIDEO_PRICES},  # veo {lite/pro}-{720p/1080p} 매트릭스
     "luma-dream-machine": "per_video",
@@ -67,7 +68,7 @@ def token_steps():
             owner = next(s for s, v in S.SERVICES.items()
                          if any(x["id"] == st_["id"] for x in
                                 (v.get("steps") or [r for rec in v.get("recipes", {}).values() for r in rec])))
-            rows.append((st_["id"], S.SERVICES[owner]["name"], st_["name"], st_["in_tok"], st_["out_tok"]))
+            rows.append((st_["id"], S.SERVICES[owner]["name"], st_["name"], st_["in_tok"], st_["out_tok"], st_.get("sys_tok", 0)))
     return rows
 
 
@@ -124,7 +125,7 @@ for _, r in edited_price.iterrows():
 
 st.sidebar.subheader("입력 토큰 추정치")
 st.sidebar.caption("코드에 명시된 값은 출력 max_tokens뿐. input은 추정(수정 가능).")
-tok_df = pd.DataFrame(token_steps(), columns=["sid", "svc", "step", "in_tok", "out_tok"])
+tok_df = pd.DataFrame(token_steps(), columns=["sid", "svc", "step", "in_tok", "out_tok", "sys_tok"])
 edited_tok = st.sidebar.data_editor(
     tok_df,
     column_config={
@@ -133,10 +134,11 @@ edited_tok = st.sidebar.data_editor(
         "step": st.column_config.TextColumn("단계", disabled=True),
         "in_tok": st.column_config.NumberColumn("input 토큰", step=100),
         "out_tok": st.column_config.NumberColumn("output 토큰", step=100),
+        "sys_tok": st.column_config.NumberColumn("시스템(캐시) 토큰", step=100),
     },
     num_rows="fixed", key="tok_tbl", width="stretch",
 )
-tok_overrides = {r["sid"]: {"in": r["in_tok"], "out": r["out_tok"]} for _, r in edited_tok.iterrows()}
+tok_overrides = {r["sid"]: {"in": r["in_tok"], "out": r["out_tok"], "sys": r["sys_tok"]} for _, r in edited_tok.iterrows()}
 
 
 def unit(svc_key, opts):
@@ -186,6 +188,11 @@ for tab, k in zip(tabs, SERV_ORDER):
                                               index=S.VIDEO_RESOLUTIONS.index(S.DEFAULT_OPTIONS[k]["video_res"]), key=f"vr_{k}")
                 o["video_sec"] = st.slider("비디오 길이 (초)", 1.0, 30.0, S.DEFAULT_OPTIONS[k]["video_sec"], 1.0, key=f"vs_{k}")
                 o["luma_prob"] = st.slider("Luma 폴백 확률 (%)", 0.0, 100.0, 0.0, 5.0, key=f"lp_{k}")
+            elif k == "batchpro":
+                o["images"] = st.slider("분석 이미지 수", 1, 6, S.DEFAULT_OPTIONS[k]["images"], key=f"img_{k}")
+                _cached = st.checkbox("프롬프트 캐시 적용 (시스템 프롬프트, 읽기 90% 할인)",
+                                      value=S.DEFAULT_OPTIONS[k]["cache_read_mult"] < 1.0, key=f"pc_{k}")
+                o["cache_read_mult"] = 0.10 if _cached else 1.0
         with c2:
             usd1, krw1 = unit(k, o)
             opts[k], qty[k], unit_usd[k], unit_krw[k] = o, q, usd1, krw1
@@ -222,7 +229,7 @@ with cc2:
 
 xs = sorted(set(max(1, round(sweep_max * i / 59)) for i in range(60)))
 fig = go.Figure()
-short = {"coordi": "코디", "review": "상품평", "search": "검색추천", "vod": "VOD영상"}
+short = {"coordi": "코디", "review": "상품평", "search": "검색추천", "vod": "VOD영상", "batchpro": "속성추출"}
 for k in SERV_ORDER:
     ys = [unit_krw[k] * x for x in xs]
     fig.add_trace(go.Scatter(x=xs, y=ys, mode="lines", name=S.SERVICES[k]["name"],

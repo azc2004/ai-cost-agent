@@ -40,6 +40,9 @@ DEFAULT_PRICES = {
     "gpt-4o":                 {"in": 2.50, "out": 10.00},
     "gpt-4o-mini":            {"in": 0.15, "out": 0.60},
     "gemini-2.5-flash":       {"in": 0.30, "out": 2.50},
+    # AWS Bedrock Nova 2 Lite (토큰/1M). 공식값 미확정 → Bifrost 추정치($0.30/$2.50).
+    # 코드는 service_tier="flex" 사용 → 실제 청구는 더 낮을 수 있음(단가표에서 조정).
+    "amazon-nova-2-lite":     {"in": 0.30, "out": 2.50},
     # USD / image — Gemini 3.1 Flash Image(Nano Banana 2) 1K(1024x1024) 장당.
     # 공식: https://ai.google.dev/gemini-api/docs/pricing ($0.067/1K장, 2026-06-30)
     "gemini-3.1-flash-image": {"per_image": 0.067},
@@ -55,9 +58,9 @@ DEFAULT_PRICES = {
 DEFAULT_FX = 1380.0  # KRW/USD — 실시간 환율 조회 실패 시 폴백(기본값은 app.py에서 실시간 조회)
 
 
-def _tok(sid, name, model, in_tok, out_tok, count=1):
+def _tok(sid, name, model, in_tok, out_tok, count=1, sys_tok=0):
     return {"id": sid, "name": name, "model": model, "billing": TOKEN,
-            "count": count, "in_tok": in_tok, "out_tok": out_tok}
+            "count": count, "in_tok": in_tok, "out_tok": out_tok, "sys_tok": sys_tok}
 
 
 def _img(sid, name, model, per_call=1, count=1):
@@ -140,6 +143,20 @@ SERVICES = {
             _vid("vod_veo", "비디오 생성(Veo)", video_key("lite", "720p"), 10.0),
         ],
     },
+    "batchpro": {
+        "name": "상품 속성·카테고리 추출", "unit": "상품 1건", "provider": "AWS Bedrock (Nova 2 Lite)",
+        # 출처: batchPro-main. 상품 1건당 Nova 2 Lite 호출 3회(1차 기본정보+대카, 2차 중분류, 3차 소분류).
+        # 1차는 이미지(기본 6장) 입력 포함 → bp_img 단계(장당 토큰). 토큰은 추정(코드에 입력토큰 명시 없음).
+        # in_tok=비캐시 입력(사용자 텍스트+이미지, 정상 과금), sys_tok=캐시된 시스템 프롬프트(90% 할인)
+        # 토큰 = litellm/Bedrock 실측값(1상품 예시). 1차: in 794+캐시 6243+out 617. 2/3차: in 384+캐시 1072+out 217.
+        # 1차 비캐시(794) = 사용자 텍스트 + 이미지 6장(장당 약 100).
+        "steps": [
+            _tok("bp_basic", "1차 기본정보+대카 추론", "amazon-nova-2-lite", 194, 617, sys_tok=6243),
+            _tok("bp_img", "1차 이미지 입력(장당)", "amazon-nova-2-lite", 100, 0, count=6),
+            _tok("bp_cat_m", "2차 중분류 추론", "amazon-nova-2-lite", 384, 217, sys_tok=1072),
+            _tok("bp_cat_s", "3차 소분류 추론", "amazon-nova-2-lite", 384, 217, sys_tok=1072),
+        ],
+    },
 }
 
 # ---- 서비스별 기본 옵션(UI 초기값) ----
@@ -148,6 +165,7 @@ DEFAULT_OPTIONS = {
     "review": {"model": "gpt-4o-mini", "val_retries": 0.0},
     "search": {"cache_hit_pct": 0.0, "exa_enabled": True, "exa_calls": 2, "exa_results": 5},
     "vod": {"avg_images": 14, "video_sec": 10.0, "luma_prob": 0.0, "video_model": "lite", "video_res": "720p"},
+    "batchpro": {"images": 6, "cache_read_mult": 0.10},
 }
 
 
@@ -188,16 +206,24 @@ def concrete_steps(svc_key, opts):
             out.append({"id": "vod_luma", "name": "Luma 폴백",
                         "model": "luma-dream-machine", "billing": VIDEO,
                         "count": opts["luma_prob"] / 100, "per_call": 1})
+    elif svc_key == "batchpro":
+        for st in s["steps"]:
+            st = dict(st)
+            if st["id"] == "bp_img":                      # 이미지 장수만큼 입력 토큰 과금
+                st["count"] = opts["images"]
+            out.append(st)
     return out
 
 
-def step_usd(step, prices, tok=None):
-    """단일 단계 비용(USD). tok={"in","out"} 로 토큰 오버라이드 가능."""
+def step_usd(step, prices, tok=None, cache_read_mult=1.0):
+    """단일 단계 비용(USD). tok={"in","out","sys"} 로 토큰 오버라이드 가능.
+    sys_tok(캐시 대상 시스템 프롬프트)은 cache_read_mult × input 단가로 과금(캐시 미사용=1.0)."""
     p = prices[step["model"]]
     if step["billing"] == TOKEN:
         it = tok["in"] if tok else step["in_tok"]
         ot = tok["out"] if tok else step["out_tok"]
-        return (it * p["in"] + ot * p["out"]) / 1_000_000 * step["count"]
+        sys_ = (tok.get("sys") if tok else None) or step.get("sys_tok", 0)
+        return ((it + sys_ * cache_read_mult) * p["in"] + ot * p["out"]) / 1_000_000 * step["count"]
     if step["billing"] == IMAGE:
         return step["count"] * step["per_call"] * p["per_image"]
     if step["billing"] == REQUEST:
@@ -213,10 +239,11 @@ def step_usd(step, prices, tok=None):
 def cost_unit(svc_key, opts, prices, tok_overrides=None, fx=DEFAULT_FX):
     """기준 산출물 1건당 비용. → (usd, krw, breakdown[list])."""
     tok_overrides = tok_overrides or {}
+    cache_read_mult = opts.get("cache_read_mult", 1.0)   # 1.0=캐시 미사용, <1.0(예:0.10)=캐시 읽기 단가
     total = 0.0
     bd = []
     for st in concrete_steps(svc_key, opts):
-        u = step_usd(st, prices, tok_overrides.get(st["id"]))
+        u = step_usd(st, prices, tok_overrides.get(st["id"]), cache_read_mult)
         total += u
         bd.append({"단계": st["name"], "모델": st["model"],
                    "과금": {"token": "토큰", "image": "이미지", "video": "비디오",

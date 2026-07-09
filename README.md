@@ -1,6 +1,6 @@
 # AI 서비스 비용 산출 대시보드
 
-운영 중인 4개 AI 서비스가 **기준 산출물 1건**을 만들 때 어떤 모델을 몇 번 호출하는지(코드 기반 고정값)를 바탕으로, **환율·수량·단가·토큰** 변동에 따른 단가·총비용을 시뮬레이션하는 Streamlit 앱.
+운영 중인 5개 AI 서비스가 **기준 산출물 1건**을 만들 때 어떤 모델을 몇 번 호출하는지(코드 기반 고정값)를 바탕으로, **환율·수량·단가·토큰** 변동에 따른 단가·총비용을 시뮬레이션하는 Streamlit 앱.
 
 > 이 앱은 **"산출 엔진"**이다. 단가·토큰·환율은 시시각각 변하므로 모두 UI 입력값이며, 코드에 하드코딩하지 않는다. 단가의 진위는 보증하지 않는다.
 
@@ -35,10 +35,11 @@ python services.py
 | 상품평 초안 자동작성·검증 (`review-agent`) | 상품평 1개 |
 | 검색 키워드 추천상품 (`search-agent`) | 추천 1번 |
 | 모델 워킹/턴 영상 (`vod-agent`) | 동영상 1개 |
+| 상품 속성·카테고리 추출 (`batchPro-main`) | 상품 1건 |
 
 ## 과금 방식
 
-- **토큰**: `(입력토큰 × input단가 + 출력토큰 × output단가) / 1,000,000`
+- **토큰**: `(입력토큰 × input단가 + 출력토큰 × output단가) / 1,000,000` — 시스템 프롬프트(캐시 대상)는 cache-read 단가(**90% 할인 = input의 10%**)로 과금.
 - **이미지**: `장수 × 장당단가`
 - **비디오**: `초 × 초당단가` (Luma 폴백은 개당)
 - **외부 검색(Exa)**: `검색요청 수 × $7/1k + 본문 페이지 수 × $1/1k`
@@ -54,6 +55,8 @@ python services.py
 
 - **OpenAI** (gpt-4o / gpt-4o-mini): https://openai.com/api/pricing/
 - **Google Gemini** (gemini-2.5-flash, 이미지, Veo): https://ai.google.dev/pricing
+- **AWS Bedrock** (Nova 2 Lite): https://aws.amazon.com/bedrock/pricing/ — 공식값 미확정(Bifrost 추정 $0.30/$2.50). 코드는 `service_tier="flex"`·프롬프트 캐시 사용 → 실제 청구는 더 낮을 수 있음(단가표에서 조정).
+- **Exa** (외부 검색): https://exa.ai/pricing
 - **환율**: 사이드바 슬라이더(1,000~2,000 KRW/USD). **기본값은 실시간 환율 자동 적용**(open.er-api.com, 1시간 캐싱 · 조회 실패 시 1,380 폴백)
 
 ### 추정값 안내 (WORK_INSTRUCTION §8)
@@ -64,6 +67,7 @@ python services.py
 4. **외부 API 비용**: search-agent의 **Exa.ai 트렌드 수집 비용은 포함** — 검색 요청($7/1k) + 본문 페이지($1/1k), [Exa 공식 가격](https://exa.ai/pricing). 호출·결과 수는 search 탭에서 조정. 나머지(하프클럽/네이버/무신사/Daum·Google 뉴스, vod 하프클럽)는 무료/내부로 제외.
 5. **search-agent 임베딩**: Zilliz를 스칼라 필터(`prd_no in [...]`)로만 사용 → 임베딩 비용 0.
 6. **vod 비디오 모델/해상도**: Veo 3.1 티어(lite/fast/pro=Standard) × 해상도(720p/1080p) 매트릭스로 초당 단가 결정. 기본 **lite/720p**. 단가는 [Google 공식 가격](https://ai.google.dev/gemini-api/docs/pricing)(2026-06-30) 반영 — lite $0.05/$0.08, fast $0.10/$0.12, standard $0.40/$0.40(초당). 사이드바 단가표의 `veo-{티어}-{해상도}` 행에서 수정.
+7. **batchPro (Nova 2 Lite)**: 상품 1건당 Nova 2 Lite 호출 3회(1차 기본정보+대카·속성, 2차 중분류, 3차 소분류). 토큰은 litellm/Bedrock 실측값(1상품 예시) — **1차** 입력 7,037(캐시 6,243 + 비캐시 794)/출력 617, **2·3차** 입력 1,456(캐시 1,072 + 비캐시 384)/출력 217. 시스템 프롬프트가 입력의 ~89%를 차지하며 **프롬프트 캐시**(읽기 90% 할인) 적용 → 캐시 ON **$0.0033/상품**(OFF $0.0056, 토큰 표에서 수정 가능).
 
 ## 비고
 
