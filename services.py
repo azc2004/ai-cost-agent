@@ -57,6 +57,22 @@ DEFAULT_PRICES = {
 
 DEFAULT_FX = 1380.0  # KRW/USD — 실시간 환율 조회 실패 시 폴백(기본값은 app.py에서 실시간 조회)
 
+# 모델 → 공급사 (단계별 내역 표시용)
+MODEL_PROVIDER = {
+    "gpt-4o": "OpenAI", "gpt-4o-mini": "OpenAI",
+    "gemini-2.5-flash": "Google", "gemini-3.1-flash-image": "Google",
+    "amazon-nova-2-lite": "AWS", "luma-dream-machine": "Luma",
+    "exa-search": "Exa", "exa-contents": "Exa",
+}
+
+
+def provider_of(model):
+    if model in MODEL_PROVIDER:
+        return MODEL_PROVIDER[model]
+    if model.startswith("veo-"):   # Veo 3.1 (veo-lite/pro-720p/1080p)
+        return "Google"
+    return "-"
+
 
 def _tok(sid, name, model, in_tok, out_tok, count=1, sys_tok=0):
     return {"id": sid, "name": name, "model": model, "billing": TOKEN,
@@ -245,7 +261,7 @@ def cost_unit(svc_key, opts, prices, tok_overrides=None, fx=DEFAULT_FX):
     for st in concrete_steps(svc_key, opts):
         u = step_usd(st, prices, tok_overrides.get(st["id"]), cache_read_mult)
         total += u
-        bd.append({"단계": st["name"], "모델": st["model"],
+        bd.append({"단계": st["name"], "공급사": provider_of(st["model"]), "모델": st["model"],
                    "과금": {"token": "토큰", "image": "이미지", "video": "비디오",
                            "request": "검색요청", "page": "본문"}[st["billing"]],
                    "USD": u, "KRW": u * fx})
