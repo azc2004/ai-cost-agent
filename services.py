@@ -151,10 +151,10 @@ SERVICES = {
         # 토큰 = litellm/Bedrock 실측값(1상품 예시). 1차: in 794+캐시 6243+out 617. 2/3차: in 384+캐시 1072+out 217.
         # 1차 비캐시(794) = 사용자 텍스트 + 이미지 6장(장당 약 100).
         "steps": [
-            _tok("bp_basic", "1차 기본정보+대카 추론", "amazon-nova-2-lite", 194, 617, sys_tok=6243),
+            _tok("bp_basic", "1차 기본정보+대카 추론", "amazon-nova-2-lite", 194, 500, sys_tok=6243),
             _tok("bp_img", "1차 이미지 입력(장당)", "amazon-nova-2-lite", 100, 0, count=6),
-            _tok("bp_cat_m", "2차 중분류 추론", "amazon-nova-2-lite", 384, 217, sys_tok=1072),
-            _tok("bp_cat_s", "3차 소분류 추론", "amazon-nova-2-lite", 384, 217, sys_tok=1072),
+            _tok("bp_cat_m", "2차 중분류 추론", "amazon-nova-2-lite", 384, 170, sys_tok=1072),
+            _tok("bp_cat_s", "3차 소분류 추론", "amazon-nova-2-lite", 384, 170, sys_tok=1072),
         ],
     },
 }
