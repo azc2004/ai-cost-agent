@@ -24,6 +24,57 @@ def _live_fx():
     except Exception:
         return S.DEFAULT_FX, False
 
+
+# ---- 단가 자동 업데이트 (LiteLLM 공개 단가 데이터셋) ----
+LITELLM_URL = "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json"
+# 우리 모델 → LiteLLM JSON 키. 미매핑(luma, exa)은 수동 유지.
+LITELLM_KEY = {
+    "gpt-4o": "gpt-4o", "gpt-4o-mini": "gpt-4o-mini", "gemini-2.5-flash": "gemini-2.5-flash",
+    "amazon-nova-2-lite": "amazon.nova-2-lite-v1:0",
+    "gemini-3.1-flash-image": "gemini-3.1-flash-image",
+    "veo-lite-720p": "gemini/veo-3.1-lite-generate-preview",
+    "veo-lite-1080p": "gemini/veo-3.1-lite-generate-preview",
+    "veo-fast-720p": "gemini/veo-3.1-fast-generate-preview",
+    "veo-fast-1080p": "gemini/veo-3.1-fast-generate-preview",
+    "veo-pro-720p": "gemini/veo-3.1-generate-preview",
+    "veo-pro-1080p": "gemini/veo-3.1-generate-preview",
+}
+
+
+def _litellm_to_price(model, entry):
+    """LiteLLM 항목 → 우리 단가 dict. 토큰은 /1M 환산."""
+    k = MODEL_KIND[model]
+    if k == "token":
+        return {"in": entry.get("input_cost_per_token", 0) * 1e6,
+                "out": entry.get("output_cost_per_token", 0) * 1e6}
+    if k == "image":
+        return {"per_image": entry.get("output_cost_per_image", 0)}
+    if k == "per_second":  # Veo: 1080p는 별도 필드 사용
+        if model.endswith("1080p") and "output_cost_per_second_1080p" in entry:
+            return {"per_second": entry["output_cost_per_second_1080p"]}
+        return {"per_second": entry.get("output_cost_per_second", 0)}
+    return None  # per_video(luma) / request·page(exa) → LiteLLM 미포함, 수동
+
+
+def refresh_prices(base):
+    """LiteLLM 공개 단가에서 우리 모델 단가 갱신. → (new_base, updated[], skipped[], err|None)."""
+    try:
+        with urllib.request.urlopen(LITELLM_URL, timeout=20) as r:
+            data = json.load(r)
+    except Exception as e:
+        return base, [], list(LITELLM_KEY), f"조회 실패: {e}"
+    new = {k: dict(v) for k, v in base.items()}
+    updated, skipped = [], []
+    for our, lk in LITELLM_KEY.items():
+        entry = data.get(lk)
+        price = _litellm_to_price(our, entry) if entry else None
+        if price:
+            new[our] = price
+            updated.append(our)
+        else:
+            skipped.append(our)
+    return new, updated, skipped, None
+
 # ---- 테마(라이트/다크) 감지 → 팔레트/잉크 선택 ----
 try:
     _base = st.get_option("theme.base")
@@ -62,7 +113,8 @@ def token_steps():
     """편집 가능한 토큰 단계 목록(coordi는 mode1의 토큰 단계로 대표)."""
     rows, seen = [], set()
     for st_ in S.SERVICES["coordi"]["recipes"]["mode1"] + S.SERVICES["review"]["steps"] \
-            + S.SERVICES["search"]["steps"] + S.SERVICES["vod"]["steps"]:
+            + S.SERVICES["search"]["steps"] + S.SERVICES["vod"]["steps"] \
+            + S.SERVICES["batchpro"]["steps"]:
         if st_["billing"] == S.TOKEN and st_["id"] not in seen:
             seen.add(st_["id"])
             owner = next(s for s, v in S.SERVICES.items()
@@ -80,16 +132,36 @@ fx = st.sidebar.slider("환율 (KRW/USD)", 1000, 2000,
 st.sidebar.caption(f"기본값 = {'실시간' if _fx_ok else '폴백'} ₩{int(round(_fx_live)):,}/USD · 출처 open.er-api.com")
 
 st.sidebar.subheader("단가 테이블 (USD)")
-st.sidebar.caption("⚠️ 조사일(2026-07) 참고값. 공식 가격 페이지에서 반드시 확인·수정.")
+st.sidebar.caption("⚠️ 기본값은 조사일 참고치. 아래 버튼으로 최신화(luma/exa는 수동).")
+
+if "price_base" not in st.session_state:
+    st.session_state.price_base = {k: dict(v) for k, v in S.DEFAULT_PRICES.items()}
+if "price_ver" not in st.session_state:
+    st.session_state.price_ver = 0
+
+if st.sidebar.button("🔄 단가 자동 업데이트 (LiteLLM)", width="stretch"):
+    with st.spinner("LiteLLM 공개 단가 조회 중..."):
+        _nb, _upd, _skp, _err = refresh_prices(st.session_state.price_base)
+    if _err:
+        st.session_state.price_msg = f"❌ {_err}"
+    else:
+        st.session_state.price_base = _nb
+        st.session_state.price_ver += 1
+        _manual = [m for m in MODEL_KIND if m not in LITELLM_KEY]
+        st.session_state.price_msg = f"✅ {len(_upd)}개 갱신 · 수동유지: {', '.join(_skp + _manual) or '없음'}"
+if st.session_state.get("price_msg"):
+    st.sidebar.caption(st.session_state.price_msg)
+
+_base = st.session_state.price_base
 price_df = pd.DataFrame([
     {"model": m, "kind": KIND_LABEL[MODEL_KIND[m]],
-     "in_price": S.DEFAULT_PRICES[m].get("in", 0.0),
-     "out_price": S.DEFAULT_PRICES[m].get("out", 0.0),
-     "per_image": S.DEFAULT_PRICES[m].get("per_image", 0.0),
-     "per_second": S.DEFAULT_PRICES[m].get("per_second", 0.0),
-     "per_video": S.DEFAULT_PRICES[m].get("per_video", 0.0),
-     "per_request": S.DEFAULT_PRICES[m].get("per_request", 0.0),
-     "per_page": S.DEFAULT_PRICES[m].get("per_page", 0.0)}
+     "in_price": _base[m].get("in", 0.0),
+     "out_price": _base[m].get("out", 0.0),
+     "per_image": _base[m].get("per_image", 0.0),
+     "per_second": _base[m].get("per_second", 0.0),
+     "per_video": _base[m].get("per_video", 0.0),
+     "per_request": _base[m].get("per_request", 0.0),
+     "per_page": _base[m].get("per_page", 0.0)}
     for m in MODEL_KIND
 ])
 edited_price = st.sidebar.data_editor(
@@ -105,7 +177,7 @@ edited_price = st.sidebar.data_editor(
         "per_request": st.column_config.NumberColumn("검색/건", format="%.4f"),
         "per_page": st.column_config.NumberColumn("본문/page", format="%.4f"),
     },
-    num_rows="fixed", key="price_tbl", width="stretch",
+    num_rows="fixed", key=f"price_tbl_{st.session_state.price_ver}", width="stretch",
 )
 prices = {}
 for _, r in edited_price.iterrows():

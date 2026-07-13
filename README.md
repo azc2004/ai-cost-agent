@@ -53,9 +53,10 @@ python services.py
 
 사이드바의 **단가 테이블**과 **입력 토큰 추정치**는 조사일(2026-07) 기준 **참고 기본값**이다. 정확한 산출을 위해 각 제공자 공식 가격 페이지에서 최신값을 확인한 뒤 UI에서 직접 수정할 것.
 
+- **🔄 단가 자동 업데이트**: 사이드바 버튼 클릭 시 [LiteLLM 공개 단가 데이터셋](https://github.com/BerriAI/litellm)에서 토큰/이미지/비디오 단가를 일괄 갱신(OpenAI·Gemini·AWS Nova·Veo 11개 모델). luma 폴백·Exa는 미포함 → 수동.
 - **OpenAI** (gpt-4o / gpt-4o-mini): https://openai.com/api/pricing/
 - **Google Gemini** (gemini-2.5-flash, 이미지, Veo): https://ai.google.dev/pricing
-- **AWS Bedrock** (Nova 2 Lite): https://aws.amazon.com/bedrock/pricing/ — 공식값 미확정(Bifrost 추정 $0.30/$2.50). 코드는 `service_tier="flex"`·프롬프트 캐시 사용 → 실제 청구는 더 낮을 수 있음(단가표에서 조정).
+- **AWS Bedrock** (Nova 2 Lite): https://aws.amazon.com/bedrock/pricing/ — $0.30/$2.50(LiteLLM 데이터셋 확인). 코드는 `service_tier="flex"`·프롬프트 캐시 사용 → 실제 청구는 더 낮을 수 있음(단가표에서 조정).
 - **Exa** (외부 검색): https://exa.ai/pricing
 - **환율**: 사이드바 슬라이더(1,000~2,000 KRW/USD). **기본값은 실시간 환율 자동 적용**(open.er-api.com, 1시간 캐싱 · 조회 실패 시 1,380 폴백)
 
