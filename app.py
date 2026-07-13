@@ -136,8 +136,6 @@ st.sidebar.caption("⚠️ 기본값은 조사일 참고치. 아래 버튼으로
 
 if "price_base" not in st.session_state:
     st.session_state.price_base = {k: dict(v) for k, v in S.DEFAULT_PRICES.items()}
-if "price_ver" not in st.session_state:
-    st.session_state.price_ver = 0
 
 if st.sidebar.button("🔄 단가 자동 업데이트 (LiteLLM)", width="stretch"):
     with st.spinner("LiteLLM 공개 단가 조회 중..."):
@@ -146,7 +144,7 @@ if st.sidebar.button("🔄 단가 자동 업데이트 (LiteLLM)", width="stretch
         st.session_state.price_msg = f"❌ {_err}"
     else:
         st.session_state.price_base = _nb
-        st.session_state.price_ver += 1
+        st.session_state.pop("price_tbl", None)   # 편집기 강제 재초기화(새 단가 반영)
         _manual = [m for m in MODEL_KIND if m not in LITELLM_KEY]
         st.session_state.price_msg = f"✅ {len(_upd)}개 갱신 · 수동유지: {', '.join(_skp + _manual) or '없음'}"
 if st.session_state.get("price_msg"):
@@ -177,7 +175,7 @@ edited_price = st.sidebar.data_editor(
         "per_request": st.column_config.NumberColumn("검색/건", format="%.4f"),
         "per_page": st.column_config.NumberColumn("본문/page", format="%.4f"),
     },
-    num_rows="fixed", key=f"price_tbl_{st.session_state.price_ver}", width="stretch",
+    num_rows="fixed", key="price_tbl", width="stretch",
 )
 prices = {}
 for _, r in edited_price.iterrows():
@@ -242,9 +240,9 @@ for tab, k in zip(tabs, SERV_ORDER):
                 o["try_on_n"] = st.number_input("착장 횟수 N", 1, 50, S.DEFAULT_OPTIONS[k]["try_on_n"], key=f"n_{k}")
                 o["retry_pct"] = st.slider("재시도 가중률 (%)", 0.0, 300.0, 0.0, 5.0, key=f"r_{k}")
             elif k == "review":
-                o["model"] = st.selectbox("모델", svc["selectable_model"],
-                                          index=svc["selectable_model"].index(S.DEFAULT_OPTIONS[k]["model"]),
-                                          key=f"md_{k}")
+                if f"md_{k}" not in st.session_state:   # 기본값(첫 옵션 아님)은 세션상태로 1회 초기화
+                    st.session_state[f"md_{k}"] = S.DEFAULT_OPTIONS[k]["model"]
+                o["model"] = st.selectbox("모델", svc["selectable_model"], key=f"md_{k}")
                 o["val_retries"] = st.slider("검증 재시도 평균 (회)", 0.0, 5.0, 0.0, 0.1, key=f"vr_{k}")
             elif k == "search":
                 o["cache_hit_pct"] = st.slider("큐레이션 캐시 적중률 (%)", 0.0, 100.0, 0.0, 5.0, key=f"c_{k}")
@@ -254,10 +252,8 @@ for tab, k in zip(tabs, SERV_ORDER):
             elif k == "vod":
                 o["avg_images"] = st.slider("평균 분석 이미지 수", 1, 14, S.DEFAULT_OPTIONS[k]["avg_images"], key=f"ai_{k}")
                 o["video_model"] = st.selectbox("비디오 모델", list(S.VIDEO_MODELS),
-                                                format_func=lambda m: S.VIDEO_MODELS[m],
-                                                index=list(S.VIDEO_MODELS).index(S.DEFAULT_OPTIONS[k]["video_model"]), key=f"vm_{k}")
-                o["video_res"] = st.selectbox("해상도", S.VIDEO_RESOLUTIONS,
-                                              index=S.VIDEO_RESOLUTIONS.index(S.DEFAULT_OPTIONS[k]["video_res"]), key=f"vr_{k}")
+                                                format_func=lambda m: S.VIDEO_MODELS[m], key=f"vm_{k}")
+                o["video_res"] = st.selectbox("해상도", S.VIDEO_RESOLUTIONS, key=f"vr_{k}")
                 o["video_sec"] = st.slider("비디오 길이 (초)", 1.0, 30.0, S.DEFAULT_OPTIONS[k]["video_sec"], 1.0, key=f"vs_{k}")
                 o["luma_prob"] = st.slider("Luma 폴백 확률 (%)", 0.0, 100.0, 0.0, 5.0, key=f"lp_{k}")
             elif k == "batchpro":
