@@ -110,9 +110,10 @@ KIND_LABEL = {"token": "토큰/1M", "image": "이미지/장", "per_second": "비
 
 
 def token_steps():
-    """편집 가능한 토큰 단계 목록(coordi는 mode1의 토큰 단계로 대표)."""
+    """편집 가능한 토큰 단계 목록."""
     rows, seen = [], set()
-    for st_ in S.SERVICES["coordi"]["recipes"]["mode1"] + S.SERVICES["review"]["steps"] \
+    coordi_all = [st for rec in S.SERVICES["coordi"]["recipes"].values() for st in rec]
+    for st_ in coordi_all + S.SERVICES["review"]["steps"] \
             + S.SERVICES["search"]["steps"] + S.SERVICES["vod"]["steps"] \
             + S.SERVICES["batchpro"]["steps"]:
         if st_["billing"] == S.TOKEN and st_["id"] not in seen:
@@ -237,7 +238,10 @@ for tab, k in zip(tabs, SERV_ORDER):
             o = dict(S.DEFAULT_OPTIONS[k])
             if k == "coordi":
                 o["mode"] = st.selectbox("모드", list(svc["modes"]), format_func=lambda m: svc["modes"][m], key=f"m_{k}")
-                o["try_on_n"] = st.number_input("착장 횟수 N", 1, 50, S.DEFAULT_OPTIONS[k]["try_on_n"], key=f"n_{k}")
+                if "modeC" in o["mode"]:
+                    o["parsed_items_n"] = st.number_input("파싱/재랭킹 품목 수 (개)", 1, 10, S.DEFAULT_OPTIONS[k]["parsed_items_n"], key=f"pi_{k}")
+                if "tryon" in o["mode"] or o["mode"] in ["mode1", "mode2"]:
+                    o["try_on_n"] = st.number_input("착장 횟수 N", 1, 50, S.DEFAULT_OPTIONS[k]["try_on_n"], key=f"n_{k}")
                 o["retry_pct"] = st.slider("재시도 가중률 (%)", 0.0, 300.0, 0.0, 5.0, key=f"r_{k}")
             elif k == "review":
                 if f"md_{k}" not in st.session_state:   # 기본값(첫 옵션 아님)은 세션상태로 1회 초기화

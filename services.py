@@ -106,10 +106,12 @@ SERVICES = {
         "name": "상품 코디 추천", "unit": "코디 1개", "provider": "Google",
         "url": "https://tricycle-coordi-agent.streamlit.app",
         "modes": {
-            "mode1": "모드1 (추천+좌표+트렌드+화보)",
-            "mode2": "모드2 (좌표+트렌드+화보)",
-            "mode3_rec": "모드3-추천만 (추천+트렌드)",
-            "mode3_tryon": "모드3-착장포함 (추천+트렌드+착장N)",
+            "mode1": "모드1/A (자동코디: 추천+좌표+트렌드+화보)",
+            "mode2": "모드2/B (수동조합: 좌표+트렌드+화보)",
+            "modeC_rec": "모드3/C-추천만 (사진업로드: 파싱+재랭킹+좌표+트렌드+화보)",
+            "modeC_tryon": "모드3/C-착장포함 (사진업로드: 파싱+재랭킹+좌표+트렌드+화보+착장N)",
+            "mode3_rec": "모드4/D-추천만 (단품추천: 추천+트렌드)",
+            "mode3_tryon": "모드4/D-착장포함 (단품추천: 추천+트렌드+착장N)",
         },
         "recipes": {
             "mode1": [
@@ -122,6 +124,21 @@ SERVICES = {
                 _tok("coordi_det", "좌표 검출", "gemini-2.5-flash", 800, 400),
                 _tok("coordi_tr", "트렌드 평가", "gemini-2.5-flash", 600, 300),
                 _img("coordi_flat", "화보 이미지 생성", "gemini-3.1-flash-image", 1),
+            ],
+            "modeC_rec": [
+                _tok("coordi_img_parse", "착장 사진 비전 파싱", "gemini-2.5-flash", 2500, 800),
+                _tok("coordi_vis_match", "후보 비주얼 재랭킹(품목당)", "gemini-2.5-flash", 2000, 200, count=5),
+                _tok("coordi_det", "좌표 검출", "gemini-2.5-flash", 800, 400),
+                _tok("coordi_tr", "트렌드 평가", "gemini-2.5-flash", 600, 300),
+                _img("coordi_flat", "화보 이미지 생성", "gemini-3.1-flash-image", 1),
+            ],
+            "modeC_tryon": [
+                _tok("coordi_img_parse", "착장 사진 비전 파싱", "gemini-2.5-flash", 2500, 800),
+                _tok("coordi_vis_match", "후보 비주얼 재랭킹(품목당)", "gemini-2.5-flash", 2000, 200, count=5),
+                _tok("coordi_det", "좌표 검출", "gemini-2.5-flash", 800, 400),
+                _tok("coordi_tr", "트렌드 평가", "gemini-2.5-flash", 600, 300),
+                _img("coordi_flat", "화보 이미지 생성", "gemini-3.1-flash-image", 1),
+                _img("coordi_tryon", "착장 이미지 생성", "gemini-3.1-flash-image", 1),
             ],
             "mode3_rec": [
                 _tok("coordi_rec", "코디 추천", "gemini-2.5-flash", 1200, 1000),
@@ -177,7 +194,7 @@ SERVICES = {
 
 # ---- 서비스별 기본 옵션(UI 초기값) ----
 DEFAULT_OPTIONS = {
-    "coordi": {"mode": "mode1", "try_on_n": 3, "retry_pct": 0.0},
+    "coordi": {"mode": "mode1", "try_on_n": 3, "parsed_items_n": 5, "retry_pct": 0.0},
     "review": {"model": "gpt-4o-mini", "val_retries": 0.0},
     "search": {"cache_hit_pct": 0.0, "exa_enabled": True, "exa_calls": 2, "exa_results": 5},
     "vod": {"avg_images": 14, "video_sec": 10.0, "luma_prob": 0.0, "video_model": "lite", "video_res": "720p"},
@@ -194,6 +211,8 @@ def concrete_steps(svc_key, opts):
             st = dict(st)
             if st["id"] == "coordi_tryon":
                 st["per_call"] = opts["try_on_n"]
+            elif st["id"] == "coordi_vis_match":
+                st["count"] = opts.get("parsed_items_n", 5)
             out.append(st)
         rw = 1 + opts["retry_pct"] / 100          # 재시도 가중률 → 기댓값 호출 수
         for st in out:

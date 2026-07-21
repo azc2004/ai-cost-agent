@@ -37,17 +37,20 @@
 
 ### 3.1 coordi-agent (코디 1개) — Google
 
-| 단계 | 모델 | 제공자 | 과금 방식 | 모드1 | 모드2 | 모드3(추천만) | 모드3(착장포함) |
-|------|------|--------|----------|-------|-------|---------------|-----------------|
-| 코디 추천 | `gemini-2.5-flash` | Google | 토큰 | 1 (temp 1.0) | — | 1 (temp 0.7) | 1 |
-| 좌표 검출 | `gemini-2.5-flash` | Google | 토큰(이미지 입력) | 1 | 1 | — | — |
-| 트렌드 평가 | `gemini-2.5-flash` | Google | 토큰 | 1 (temp 0.7) | 1 | 1 | 1 |
-| 화보/착장 이미지 생성 | `gemini-3.1-flash-image` | Google | **이미지 1장당**(aspect 3:4) | 1 | 1 | — | N(착장 횟수) |
-| **텍스트 LLM 합계** | | | | **3** | **2** | **2** | **2** |
-| **이미지 생성 합계** | | | | **1** | **1** | **0** | **N** |
+| 단계 | 모델 | 제공자 | 과금 방식 | 모드1/A (자동) | 모드2/B (수동) | 모드C (사진업로드-추천) | 모드C (사진업로드-착장) | 모드D/3 (단품추천) | 모드D/3 (단품착장) |
+|------|------|--------|----------|---------------|---------------|-------------------------|-------------------------|-------------------|-------------------|
+| 코디 추천 | `gemini-2.5-flash` | Google | 토큰 | 1 (temp 1.0) | — | — | — | 1 (temp 0.7) | 1 |
+| 착장 사진 비전 파싱 | `gemini-2.5-flash` | Google | 토큰(Vision) | — | — | 1 | 1 | — | — |
+| 후보 비주얼 재랭킹 | `gemini-2.5-flash` | Google | 토큰(Vision) | — | — | N_items (기본 5) | N_items (기본 5) | — | — |
+| 좌표 검출 | `gemini-2.5-flash` | Google | 토큰(이미지 입력) | 1 | 1 | 1 | 1 | — | — |
+| 트렌드 평가 | `gemini-2.5-flash` | Google | 토큰 | 1 (temp 0.7) | 1 | 1 | 1 | 1 | 1 |
+| 화보/착장 이미지 생성 | `gemini-3.1-flash-image` | Google | **이미지 1장당**(aspect 3:4) | 1 | 1 | 1 | 1 + N | — | N(착장 횟수) |
+| **텍스트/비전 LLM 합계** | | | | **3** | **2** | **3 + N_items** | **3 + N_items** | **2** | **2** |
+| **이미지 생성 합계** | | | | **1** | **1** | **1** | **1 + N** | **0** | **N** |
 
-- 코드 근거: `coordi-agent/llm_service.py` (함수 `extract_coordi_keywords`, `generate_context_aware_outfit`, `detect_item_coordinates`, `evaluate_outfit_trendiness`, `generate_outfit_flatlay_image`, `generate_try_on_image`)
+- 코드 근거: `coordi-agent/llm_service.py` (함수 `extract_coordi_keywords`, `generate_context_aware_outfit`, `analyze_image_and_extract_coordi`, `select_best_visual_match`, `detect_item_coordinates`, `evaluate_outfit_trendiness`, `generate_outfit_flatlay_image`, `generate_try_on_image`)
 - 비고: `call_gemini_with_retry`가 503/429 시 최대 4회 재시도 → 실제 청구는 1~4회 가변. 앱에서는 "재시도 가중률 %" 조정 옵션 제공.
+- 비고: 모드C (사진 업로드 유사 코디)는 착장 이미지 파싱(in 2,500/out 800) 및 품목별 후보 비주얼 1:1 대조 재랭킹(품목당 in 2,000/out 200, N_items회)을 수행함.
 
 ### 3.2 review-agent (상품평 1개) — OpenAI
 
